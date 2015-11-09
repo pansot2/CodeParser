@@ -17,5 +17,11 @@
             <artifactId>core</artifactId>
             <version>3.3.0-v_771</version>
         </dependency>
+        <dependency>
+            <groupId>org.jboss.metrics</groupId>
+            <artifactId>AutomatedMetricsJavaSeApi</artifactId>
+            <version>1.0.2.Final</version>
+            <type>jar</type>
+        </dependency>
     </dependencies>
 </project>

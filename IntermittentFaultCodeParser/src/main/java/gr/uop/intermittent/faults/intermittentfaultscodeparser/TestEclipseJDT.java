@@ -27,6 +27,8 @@ import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.Statement;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
+import org.jboss.metrics.javase.automatedmetricsjavaseapi.MetricsPropertiesApi;
+import org.jboss.metrics.jbossautomatedmetricsproperties.MetricProperties;
 
 /**
  *
@@ -37,6 +39,7 @@ public class TestEclipseJDT {
     private int count = 0;
     private int count2 = 1;
     private HelloClass hello;
+    private static String groupName = "intermittentFaultsGroup";
 
     public TestEclipseJDT() {
         count = 1;
@@ -61,9 +64,10 @@ public class TestEclipseJDT {
             public boolean visit(FieldDeclaration node) {
                 String name = node.fragments().get(0).toString().split("=")[0];
                 String type = node.getType().toString();
+                names.add(name);
                 System.out.println("Field declaration '" + name + "' with type " + type + " at line "
                         + cu.getLineNumber(node.getStartPosition()));
-                return false;
+                return true;
             }
 
             public boolean visit(MethodDeclaration node) {
@@ -74,7 +78,7 @@ public class TestEclipseJDT {
                     Map<Integer, Set> variableNames = new HashMap();
                     blockIterate(block, cu, names, 0, variableNames);
                 }
-                return false;
+                return true;
             }
         });
 
@@ -82,25 +86,25 @@ public class TestEclipseJDT {
 
     private static void blockIterate(final Block block, final CompilationUnit cu, final Set fieldNames, final int blockNum, final Map<Integer, Set> variableNames) {
         List<Statement> statements = block.statements();
-        System.out.println("Statements : " + statements.toString());
+       // System.out.println("Statements : " + statements.toString());
         
         Set variables = new HashSet();
         variableNames.put(blockNum, variables);
         
         for (Statement s : statements) {
-            s.accept(new ASTVisitor() {
-                Set names_ = new HashSet();
+            s.accept(new ASTVisitor() { 
 
                 public boolean visit(VariableDeclarationFragment node) {
                     SimpleName name = node.getName();
-                    variableNames.get(blockNum).add(name.getIdentifier());
+                    variableNames.get(blockNum).add(name);
                     System.out.println("Declaration of variable '" + name + "' at line"
                             + cu.getLineNumber(name.getStartPosition())); 
                     return false; 
                 }
 
                 public boolean visit(SimpleName node) {
-                    if (searchVariable(variableNames,node.getIdentifier())!=-1 || fieldNames.contains(node.getIdentifier())) {
+               //     System.out.println(node.getIdentifier() + " searchVariable(variableNames,node.getIdentifier() " + searchVariable(variableNames,node.getIdentifier()));
+                    if (searchVariable(variableNames,node.getIdentifier())!=-1 || searchField(fieldNames,node.getIdentifier())) {
                         System.out.println("Usage of variable/field '" + node.getIdentifier() + "' at line "
                                 + cu.getLineNumber(node.getStartPosition()));
                     }
@@ -122,9 +126,12 @@ public class TestEclipseJDT {
 
                 public boolean visit(Block node) {
                     if (node != null) {
-                        System.out.println("Block " + node.toString());
+                      //  System.out.println("Block " + node.toString());
                         int blockNumber = blockNum + 1;
                         blockIterate(node, cu, fieldNames, blockNumber,variableNames);
+                        
+                        for (int i=blockNumber; i<variableNames.size(); i++)
+                            variableNames.remove(i);
                     }
                     return false;
                 }
@@ -135,15 +142,33 @@ public class TestEclipseJDT {
     private static int searchVariable(Map<Integer, Set> variableNames, String variable) {
         int blockSize = variableNames.size();
         
-    //    System.out.println("BlockSize " + blockSize);
+      //  System.out.println("BlockSize " + blockSize);
         
         for (int i=blockSize-1; i>=0; i--) {
-            if (variableNames.get(i).contains(variable))
-                System.out.println("Found in block : " + i);
-                return i;
+      //      System.out.println("all " + variableNames.get(i).toString());
+            Set temp = variableNames.get(i);
+            for (Object s : temp) {
+                if (s.toString().matches(variable)) {
+                    System.out.println("Found in block : " + i);
+                    return i;
+                }
+            }
         }
         
         return -1;
+    }
+    
+    private static boolean searchField(Set fieldNames, String variable) {
+        boolean found = false;
+     //    System.out.println("all Fields " + fieldNames.toString());
+        for (Object s : fieldNames) {
+            if (s.toString().matches(variable)) {
+                System.out.println("Found field ... ");
+                found = true;
+            }
+        }
+        
+        return found;
     }
 
     //read file content into a string
@@ -182,10 +207,18 @@ public class TestEclipseJDT {
             }
         }
     }
+    
+    private static void initializeMetricProperties() {
+        MetricProperties metricProperties = new MetricProperties();
+        metricProperties.setCacheStore("true");
+        MetricsPropertiesApi.storeProperties(groupName, metricProperties);
+    }
 
     public static void main(String[] args) throws IOException {
+        initializeMetricProperties();
         File dirs = new File(".");
-        String dirPath = dirs.getCanonicalPath() + File.separator + "src" + File.separator;
+        String dirPath;
+        dirPath = dirs.getCanonicalPath() + File.separator + "src" + File.separator;
         ParseFilesInDir(dirPath);
     }
 
